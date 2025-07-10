@@ -1,0 +1,388 @@
+{% extends "base.html" %}
+
+{% block title %}{{ assignment.event_name }} - AGS{% endblock %}
+
+{% block content %}
+<!-- Assignment Header -->
+<div class="row">
+    <div class="col-12">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="badge bg-{% if assignment.event_type == 'assignment' %}primary{% elif assignment.event_type == 'quiz' %}success{% elif assignment.event_type == 'exam' %}danger{% else %}info{% endif %} me-3">
+                                {{ assignment.event_type.title() }}
+                            </span>
+                            {% if assignment.deadline %}
+                                {% set now = moment() %}
+                                {% set due_date = moment(assignment.deadline) %}
+                                {% if due_date > now %}
+                                    <span class="badge bg-success">Open</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Closed</span>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                        <h1 class="card-title mb-2">
+                            <i class="fas fa-{% if assignment.event_type == 'assignment' %}file-alt{% elif assignment.event_type == 'quiz' %}question-circle{% elif assignment.event_type == 'exam' %}clipboard-check{% else %}project-diagram{% endif %} text-primary me-2"></i>
+                            {{ assignment.event_name }}
+                        </h1>
+                        <p class="text-muted mb-2">
+                            <i class="fas fa-book me-1"></i>{{ assignment.course_name }}
+                        </p>
+                        {% if assignment.deadline %}
+                        <p class="text-muted mb-0">
+                            <i class="fas fa-calendar-alt me-1"></i>
+                            Due: {{ assignment.deadline.strftime('%B %d, %Y at %I:%M %p') }}
+                        </p>
+                        {% endif %}
+                    </div>
+                    <div class="text-end">
+                        <a href="{{ url_for('course_details', course_id=assignment.course_id) }}" 
+                           class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>Back to Course
+                        </a>
+                        {% if assignment.instructions_text %}
+                        <button class="btn btn-primary ms-2" onclick="showInstructions()">
+                            <i class="fas fa-eye me-2"></i>View Instructions
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Assignment Description -->
+{% if assignment.description %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-info-circle me-2"></i>Description
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-0">{{ assignment.description|nl2br }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Files Section -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-file-pdf me-2"></i>Instructions
+                </h5>
+            </div>
+            <div class="card-body text-center">
+                {% if assignment.instructions_text %}
+                    <i class="fas fa-file-alt fa-4x text-primary mb-3"></i>
+                    <h6>Instructions Available</h6>
+                    <p class="text-muted mb-3">Contains questions and requirements</p>
+                    <button onclick="showInstructions()" class="btn btn-primary">
+                        <i class="fas fa-eye me-2"></i>View Instructions
+                    </button>
+                {% else %}
+                    <i class="fas fa-file-alt fa-4x text-muted mb-3"></i>
+                    <h6 class="text-muted">No instructions file</h6>
+                    <p class="text-muted">Instructions are in the description above</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-{% if session.user_type == 'professor' %}key{% else %}upload{% endif %} me-2"></i>
+                    {% if session.user_type == 'professor' %}Answer Key{% else %}Your Submission{% endif %}
+                </h5>
+            </div>
+            <div class="card-body text-center">
+                {% if session.user_type == 'professor' %}
+                    {% if assignment.answer_text %}
+                        <i class="fas fa-key fa-4x text-success mb-3"></i>
+                        <h6>Answer Key Available</h6>
+                        <p class="text-muted mb-3">Used for automatic grading</p>
+                        <button onclick="showAnswerKey()" class="btn btn-success">
+                            <i class="fas fa-eye me-2"></i>View Answer Key
+                        </button>
+                    {% else %}
+                        <i class="fas fa-key fa-4x text-muted mb-3"></i>
+                        <h6 class="text-muted">No answer key</h6>
+                        <p class="text-muted">Manual grading required</p>
+                    {% endif %}
+                {% else %}
+                    <!-- Student submission area -->
+                    {% if submission %}
+                        <i class="fas fa-check-circle fa-4x text-success mb-3"></i>
+                        <h6>Submitted</h6>
+                        <p class="text-muted mb-3">Submitted on {{ submission.submitted_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
+                        {% if submission.grade is not none %}
+                            <div class="alert alert-success">
+                                <strong>Grade: {{ submission.grade }}/10</strong>
+                            </div>
+                            {% if submission.feedback %}
+                                <div class="mt-3">
+                                    <h6>Feedback:</h6>
+                                    <div class="text-start bg-light p-3 rounded">
+                                        {{ submission.feedback|nl2br }}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            <span class="badge bg-warning">Pending Grade</span>
+                        {% endif %}
+                    {% else %}
+                        {% if assignment.deadline and assignment.deadline < moment() %}
+                            <i class="fas fa-times-circle fa-4x text-danger mb-3"></i>
+                            <h6 class="text-danger">Deadline Passed</h6>
+                            <p class="text-muted">Submission no longer allowed</p>
+                        {% else %}
+                            <i class="fas fa-upload fa-4x text-primary mb-3"></i>
+                            <h6>Upload Your Answer</h6>
+                            <p class="text-muted mb-3">Submit your work as a PDF</p>
+                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#submissionModal">
+                                <i class="fas fa-upload me-2"></i>Submit Assignment
+                            </button>
+                        {% endif %}
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Professor View: Submissions -->
+{% if session.user_type == 'professor' %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-users me-2"></i>Student Submissions
+                    {% if submissions %}
+                        <span class="badge bg-primary ms-2">{{ submissions|length }}</span>
+                    {% endif %}
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if submissions %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Student</th>
+                                    <th>Submitted</th>
+                                    <th>Grade</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for sub in submissions %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ sub.username }}</strong>
+                                    </td>
+                                    <td>{{ sub.submitted_at.strftime('%b %d, %Y %I:%M %p') }}</td>
+                                    <td>
+                                        {% if sub.grade is not none %}
+                                            <span class="badge bg-success">{{ sub.grade }}/10</span>
+                                        {% else %}
+                                            <span class="badge bg-warning">Pending</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if sub.feedback %}
+                                            <span class="badge bg-info">Feedback Given</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">No Feedback</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button onclick="showSubmission('{{ sub.submission_text|replace('\n', '\\n')|replace("'", "\\'") }}')" 
+                                                    class="btn btn-outline-primary" title="View Submission">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <button class="btn btn-outline-success" title="Grade Submission">
+                                                <i class="fas fa-star"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
+                        <h4 class="text-muted">No submissions yet</h4>
+                        <p class="text-muted">Students will see their submissions here once they upload them.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Student Submission Modal -->
+{% if session.user_type == 'student' and not submission and (not assignment.deadline or assignment.deadline > moment()) %}
+<div class="modal fade" id="submissionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-upload me-2"></i>Submit Assignment
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/submit_assignment/{{ assignment.id }}" method="POST" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="submission_file" class="form-label">
+                            <i class="fas fa-file-pdf me-2"></i>Upload Your Answer (PDF)
+                        </label>
+                        <input type="file" class="form-control" id="submission_file" name="submission_file" 
+                               accept=".pdf" required>
+                        <small class="form-text text-muted">
+                            Maximum file size: 16MB. Only PDF files are accepted.
+                        </small>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Note:</strong> Once submitted, you cannot change your submission. Make sure your PDF is complete and readable.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload me-2"></i>Submit Assignment
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+<!-- Modals for viewing content -->
+<div class="modal fade" id="instructionsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-alt me-2"></i>Assignment Instructions
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="instructionsContent" style="white-space: pre-wrap; font-family: 'Courier New', monospace; background: #f8f9fa; padding: 20px; border-radius: 5px; max-height: 60vh; overflow-y: auto;">
+                    {{ assignment.instructions_text if assignment.instructions_text else 'No instructions available.' }}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if session.user_type == 'professor' and assignment.answer_text %}
+<div class="modal fade" id="answerKeyModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-key me-2"></i>Answer Key
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Confidential:</strong> This answer key is not visible to students.
+                </div>
+                <div id="answerKeyContent" style="white-space: pre-wrap; font-family: 'Courier New', monospace; background: #f8f9fa; padding: 20px; border-radius: 5px; max-height: 60vh; overflow-y: auto;">
+                    {{ assignment.answer_text }}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="modal fade" id="submissionModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-alt me-2"></i>Student Submission
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="submissionContent" style="white-space: pre-wrap; font-family: 'Courier New', monospace; background: #f8f9fa; padding: 20px; border-radius: 5px; max-height: 60vh; overflow-y: auto;">
+                    <!-- Submission content will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showInstructions() {
+    new bootstrap.Modal(document.getElementById('instructionsModal')).show();
+}
+
+{% if session.user_type == 'professor' and assignment.answer_text %}
+function showAnswerKey() {
+    new bootstrap.Modal(document.getElementById('answerKeyModal')).show();
+}
+{% endif %}
+
+function showSubmission(submissionText) {
+    document.getElementById('submissionContent').textContent = submissionText;
+    new bootstrap.Modal(document.getElementById('submissionModal')).show();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // File upload validation for submission modal
+    const submissionFile = document.getElementById('submission_file');
+    if (submissionFile) {
+        submissionFile.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                if (file.size > 16 * 1024 * 1024) { // 16MB
+                    alert('File size must be less than 16MB');
+                    e.target.value = '';
+                    return;
+                }
+                if (!file.name.toLowerCase().endsWith('.pdf')) {
+                    alert('Please upload only PDF files');
+                    e.target.value = '';
+                    return;
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

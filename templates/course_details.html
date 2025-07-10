@@ -61,10 +61,7 @@
             <div class="card-body">
                 <i class="fas fa-clock fa-3x text-warning mb-3"></i>
                 <h5 class="card-title">Active</h5>
-                <h2 class="text-warning">
-                    {% set active_count = assignments|selectattr('deadline', 'gt', moment().format('YYYY-MM-DD HH:mm:ss'))|list|length %}
-                    {{ assignments|selectattr('deadline')|list|length }}
-                </h2>
+                <h2 class="text-warning">{{ active_count }}</h2>
             </div>
         </div>
     </div>
@@ -144,14 +141,24 @@
                                                 Due: {{ assignment.deadline.strftime('%b %d, %Y') if assignment.deadline else 'No deadline' }}
                                             </small>
                                             {% if assignment.deadline %}
-                                                {% set now = moment() %}
-                                                {% set due_date = moment(assignment.deadline) %}
-                                                {% if due_date > now %}
+                                                {# Active/Expired Label based on deadline #}
+                                                {% if assignment.deadline > now %}
+                                                    <span class="badge bg-success">Active</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">Expired</span>
+                                                {% endif %}
+
+                                                {# Display human-readable due date #}
+                                                Due: {{ assignment.deadline.strftime('%b %d, %Y') }}
+
+                                                {# Open/Closed Label based on deadline #}
+                                                {% if assignment.deadline > now %}
                                                     <span class="badge bg-success">Open</span>
                                                 {% else %}
                                                     <span class="badge bg-danger">Closed</span>
                                                 {% endif %}
                                             {% endif %}
+
                                         </div>
                                         
                                         <div class="d-flex gap-2">

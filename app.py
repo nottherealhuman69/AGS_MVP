@@ -24,6 +24,8 @@ def extract_text_from_pdf(pdf_file):
     except Exception as e:
         print(f"PDF text extraction failed: {e}")
         return None
+
+# Database setup
 def init_db():
     conn = sqlite3.connect('ags.db')
     c = conn.cursor()
@@ -252,6 +254,8 @@ def enroll_course():
     
     return render_template('enroll_course.html')
 
+from datetime import datetime
+
 @app.route('/course/<int:course_id>')
 def course_details(course_id):
     if 'user_id' not in session:
@@ -264,34 +268,51 @@ def course_details(course_id):
         flash('Course not found')
         return redirect(url_for('index'))
     
-    # Check if user has access to this course
     if session['user_type'] == 'professor':
         if course['professor_id'] != session['user_id']:
             flash('Access denied')
             return redirect(url_for('professor_dashboard'))
-    else:  # student
+    else:
         enrollment = conn.execute('SELECT * FROM enrollments WHERE student_id = ? AND course_id = ?',
-                                (session['user_id'], course_id)).fetchone()
+                                  (session['user_id'], course_id)).fetchone()
         if not enrollment:
             flash('You are not enrolled in this course')
             return redirect(url_for('student_dashboard'))
-    
-    # Get assignments for this course
-    assignments = conn.execute('''SELECT * FROM events WHERE course_id = ? ORDER BY deadline ASC''',
-                             (course_id,)).fetchall()
-    
-    # Get professor details
+
+    rows = conn.execute('''SELECT * FROM events WHERE course_id = ? ORDER BY deadline ASC''',
+                    (course_id,)).fetchall()
+
+    assignments = []
+    for row in rows:
+        a = dict(row)  # Convert sqlite3.Row to a dict
+        if a['deadline']:
+            try:
+                a['deadline'] = datetime.strptime(a['deadline'], '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                a['deadline'] = None
+        assignments.append(a)
+
+
+
     professor = conn.execute('SELECT username FROM users WHERE id = ?', 
-                           (course['professor_id'],)).fetchone()
-    
-    # Get enrollment count
+                             (course['professor_id'],)).fetchone()
+
     enrollment_count = conn.execute('SELECT COUNT(*) as count FROM enrollments WHERE course_id = ?',
-                                  (course_id,)).fetchone()['count']
-    
+                                    (course_id,)).fetchone()['count']
+
     conn.close()
-    
-    return render_template('course_details.html', course=course, assignments=assignments, 
-                         professor=professor, enrollment_count=enrollment_count)
+
+    # Calculate active assignments
+    now = datetime.now()
+    active_assignments = [a for a in assignments if a['deadline'] and a['deadline'] > now]
+    active_count = len(active_assignments)
+
+    return render_template('course_details.html',
+                           course=course,
+                           assignments=assignments,
+                           professor=professor,
+                           enrollment_count=enrollment_count,
+                           active_count=active_count, now=now)
 
 @app.route('/course/<int:course_id>/create_assignment', methods=['GET', 'POST'])
 def create_assignment(course_id):
@@ -494,72 +515,7 @@ def submit_assignment(assignment_id):
         flash('Assignment submitted successfully!')
     
     conn.close()
-    return redirect(url_for('assignment_details', assignment_id=assignment_id)) submission file
-    filename = secure_filename(f"submission_{assignment_id}_{session['user_id']}_{submission_file.filename}")
-    submission_path = os.path.join('submissions', filename)
-    submission_file.save(os.path.join(app.config['UPLOAD_FOLDER'], submission_path))
-    
-    # Save submission to database
-    conn.execute('''INSERT INTO submissions (event_id, student_id, submission_path) 
-                    VALUES (?, ?, ?)''',
-                (assignment_id, session['user_id'], submission_path))
-    conn.commit()
-    
-    # If there's an answer key, trigger automatic grading
-    if assignment['answer_pdf_path']:
-        try:
-            # Import your grading functions
-            from text_extraction import convert_pdf_to_txt
-            from automated_grading import get_response
-            
-            # Extract text from answer key and submission
-            answer_key_path = os.path.join(app.config['UPLOAD_FOLDER'], assignment['answer_pdf_path'])
-            submission_file_path = os.path.join(app.config['UPLOAD_FOLDER'], submission_path)
-            
-            answer_text = convert_pdf_to_txt(answer_key_path)
-            student_text = convert_pdf_to_txt(submission_file_path)
-            
-            # Get automated grade and feedback
-            grading_result = get_response(answer_text, student_text)
-            
-            # Parse the grading result to extract grade and feedback
-            lines = grading_result.strip().split('\n')
-            grade = None
-            feedback = grading_result
-            
-            # Try to extract numeric grade
-            for line in lines:
-                if 'Grade:' in line:
-                    try:
-                        grade_part = line.split('Grade:')[1].split('/')[0].strip()
-                        grade = int(grade_part)
-                        break
-                    except:
-                        pass
-            
-            # Update submission with grade and feedback
-            conn.execute('''UPDATE submissions SET grade = ?, feedback = ? 
-                           WHERE event_id = ? AND student_id = ?''',
-                        (grade, feedback, assignment_id, session['user_id']))
-            conn.commit()
-            
-            flash('Assignment submitted successfully! Automatic grading complete.')
-            
-        except Exception as e:
-            # If automatic grading fails, still save the submission
-            flash('Assignment submitted successfully! Grading will be done manually.')
-            print(f"Automatic grading failed: {e}")
-    else:
-        flash('Assignment submitted successfully!')
-    
-    conn.close()
     return redirect(url_for('assignment_details', assignment_id=assignment_id))
-
-@app.route('/download/<path:filename>')
-def download_file(filename):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 if __name__ == '__main__':
     print("Starting AGS application...")

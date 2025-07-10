@@ -14,39 +14,89 @@ import sys
 # Download required NLTK data (only download if not already present)
 try:
     nltk.data.find('tokenizers/punkt')
+    print("✓ NLTK punkt tokenizer found")
 except LookupError:
-    nltk.download('punkt')
+    print("⬇ Downloading NLTK punkt tokenizer...")
+    nltk.download('punkt', quiet=True)
 
-try:
-    nltk.data.find('tokenizers/punkt_tab')
-except LookupError:
-    nltk.download('punkt_tab')
+
+
+# Additional fallback for sentence tokenization
+def safe_sent_tokenize(text):
+    """Safe sentence tokenization with fallbacks"""
+    try:
+        return sent_tokenize(text)
+    except:
+        # Fallback 1: Try with punkt only
+        try:
+            import nltk.tokenize
+            tokenizer = nltk.tokenize.punkt.PunktSentenceTokenizer()
+            return tokenizer.tokenize(text)
+        except:
+            # Fallback 2: Simple split by periods
+            return [s.strip() + '.' for s in text.split('.') if s.strip()]
+
+def safe_word_tokenize(sentence):
+    """Safe word tokenization with fallbacks"""
+    try:
+        return word_tokenize(sentence)
+    except:
+        # Fallback: Simple split by spaces and punctuation
+        import re
+        return re.findall(r'\b\w+\b', sentence)
 
 # Whitelist of additional characters to keep (mathematical symbols, etc.)
 WHITELIST = "Σ±÷×°√∞∫∂≤≥≠≈"
 
 # Configure Tesseract path (adjust for your system)
-pytesseract.pytesseract.tesseract_cmd = r'C:\Users\PC\PycharmProjects\tesseract.exe'
-# Uncomment and adjust the above line if Tesseract is not in your PATH
+try:
+    # Try to find tesseract automatically first
+    import shutil
+    tesseract_path = shutil.which('tesseract')
+    if tesseract_path:
+        pytesseract.pytesseract.tesseract_cmd = tesseract_path
+        print(f"✓ Tesseract found at: {tesseract_path}")
+    else:
+        # Fallback to common Windows locations
+        possible_paths = [
+            r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+            r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+            r'C:\Users\PC\PycharmProjects\tesseract.exe'
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                pytesseract.pytesseract.tesseract_cmd = path
+                print(f"✓ Tesseract found at: {path}")
+                break
+        else:
+            print("⚠ Tesseract not found - OCR functionality will be limited")
+except Exception as e:
+    print(f"⚠ Tesseract configuration warning: {e}")
+    print("  → OCR functionality may be limited")
 
 def extract_text_from_pdf(pdf_path):
     """
     Extract text from PDF using multiple methods.
     Tries PyMuPDF first, then PDFMiner, then Tika as fallbacks.
     """
+    doc = None
     try:
         # Method 1: Try PyMuPDF (fastest and most reliable for most PDFs)
         doc = fitz.open(pdf_path)
         text = ""
         for page in doc:
             text += page.get_text()
-        doc.close()
         
         if text.strip():
             print(f"✓ Text extracted using PyMuPDF: {len(text)} characters")
             return text
     except Exception as e:
         print(f"⚠ PyMuPDF extraction failed: {e}")
+    finally:
+        # Always close the document to release file handles
+        if doc:
+            doc.close()
 
     try:
         # Method 2: Try PDFMiner (good for complex layouts)
@@ -85,6 +135,7 @@ def handle_scanned_pdf(pdf_path):
     Use this when regular text extraction fails.
     """
     text = ""
+    doc = None
     try:
         doc = fitz.open(pdf_path)
         print(f"Processing {len(doc)} pages for OCR...")
@@ -103,15 +154,18 @@ def handle_scanned_pdf(pdf_path):
             
             print(f"✓ OCR completed for page {page_num + 1}: {len(page_text)} characters")
         
-        doc.close()
         return text
     except Exception as e:
         print(f"✗ OCR processing failed: {e}")
         return ""
+    finally:
+        if doc:
+            doc.close()
 
 def extract_images_from_pdf(pdf_path):
     """Extract images from PDF and perform OCR on them"""
     images_text = ""
+    doc = None
     try:
         doc = fitz.open(pdf_path)
         image_count = 0
@@ -137,11 +191,13 @@ def extract_images_from_pdf(pdf_path):
                 except Exception as e:
                     print(f"⚠ Failed to process image {img_index} on page {page_num + 1}: {e}")
         
-        doc.close()
         return images_text
     except Exception as e:
         print(f"✗ Image extraction failed: {e}")
         return ""
+    finally:
+        if doc:
+            doc.close()
 
 def clean_text(text):
     """Clean and normalize extracted text"""
@@ -160,24 +216,28 @@ def clean_text(text):
     return text
 
 def segment_sentences(text):
-    """Split text into sentences using NLTK"""
+    """Split text into sentences using NLTK with fallbacks"""
     try:
-        sentences = sent_tokenize(text)
+        sentences = safe_sent_tokenize(text)
         return sentences
     except Exception as e:
         print(f"⚠ Sentence segmentation failed: {e}")
-        # Fallback: split by periods
-        return text.split('.')
+        # Fallback: split by periods, exclamation marks, and question marks
+        import re
+        sentences = re.split(r'[.!?]+', text)
+        return [s.strip() for s in sentences if s.strip()]
 
 def tokenize_sentence(sentence):
-    """Tokenize sentence into words using NLTK"""
+    """Tokenize sentence into words using NLTK with fallbacks"""
     try:
-        tokens = word_tokenize(sentence)
+        tokens = safe_word_tokenize(sentence)
         return tokens
     except Exception as e:
         print(f"⚠ Tokenization failed: {e}")
-        # Fallback: split by spaces
-        return sentence.split()
+        # Fallback: split by spaces and remove punctuation
+        import re
+        tokens = re.findall(r'\b\w+\b', sentence)
+        return tokens
 
 def preprocess_text(text):
     """
@@ -251,19 +311,54 @@ def extract_text_for_flask(pdf_file_object):
     Handles file objects instead of file paths.
     """
     import tempfile
+    import time
     
-    # Create a temporary file
-    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
-        # Save the uploaded file to temporary location
-        pdf_file_object.save(temp_file.name)
+    temp_file_path = None
+    try:
+        # Create a temporary file with a unique name
+        temp_fd, temp_file_path = tempfile.mkstemp(suffix='.pdf', prefix='ags_upload_')
+        
+        # Close the file descriptor immediately to avoid locking issues
+        os.close(temp_fd)
+        
+        # Reset file pointer to beginning
+        pdf_file_object.seek(0)
+        
+        # Write the uploaded file data to temporary location
+        with open(temp_file_path, 'wb') as temp_file:
+            temp_file.write(pdf_file_object.read())
+        
+        # Reset file pointer again for potential future use
+        pdf_file_object.seek(0)
         
         # Process the PDF
-        result = convert_pdf_to_txt(temp_file.name)
-        
-        # Clean up temporary file
-        os.unlink(temp_file.name)
+        result = convert_pdf_to_txt(temp_file_path)
         
         return result
+        
+    except Exception as e:
+        print(f"Error in extract_text_for_flask: {e}")
+        return None
+        
+    finally:
+        # Clean up temporary file with retry mechanism
+        if temp_file_path and os.path.exists(temp_file_path):
+            max_retries = 5
+            for attempt in range(max_retries):
+                try:
+                    os.unlink(temp_file_path)
+                    print(f"✓ Temporary file cleaned up: {temp_file_path}")
+                    break
+                except PermissionError:
+                    if attempt < max_retries - 1:
+                        print(f"⚠ File still locked, retrying in {0.5 * (attempt + 1)} seconds...")
+                        time.sleep(0.5 * (attempt + 1))
+                    else:
+                        print(f"⚠ Could not delete temporary file: {temp_file_path}")
+                        print("  → File will be cleaned up automatically by the system")
+                except Exception as e:
+                    print(f"⚠ Error cleaning up temporary file: {e}")
+                    break
 
 # Command line interface (for testing)
 if __name__ == "__main__":

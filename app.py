@@ -11,6 +11,22 @@ app.secret_key = 'your-secret-key-change-this-in-production'
 # Configuration 
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
+# Add template functions for date handling
+@app.template_filter('moment')
+def moment_filter(date):
+    """Convert datetime to moment-like object for template use"""
+    if isinstance(date, str):
+        try:
+            return datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            return datetime.now()
+    return date if date else datetime.now()
+
+@app.template_global()
+def moment():
+    """Get current moment for template use"""
+    return datetime.now()
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
 
@@ -254,8 +270,6 @@ def enroll_course():
     
     return render_template('enroll_course.html')
 
-from datetime import datetime
-
 @app.route('/course/<int:course_id>')
 def course_details(course_id):
     if 'user_id' not in session:
@@ -291,8 +305,6 @@ def course_details(course_id):
             except ValueError:
                 a['deadline'] = None
         assignments.append(a)
-
-
 
     professor = conn.execute('SELECT username FROM users WHERE id = ?', 
                              (course['professor_id'],)).fetchone()
@@ -383,7 +395,7 @@ def assignment_details(assignment_id):
         return redirect(url_for('login'))
     
     conn = get_db()
-    assignment = conn.execute('''SELECT e.*, c.course_name, c.professor_id 
+    assignment = conn.execute('''SELECT e.*, c.course_name, c.professor_id, c.id as course_id
                                FROM events e 
                                JOIN courses c ON e.course_id = c.id 
                                WHERE e.id = ?''', (assignment_id,)).fetchone()

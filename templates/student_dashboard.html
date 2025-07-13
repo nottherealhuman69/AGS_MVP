@@ -104,12 +104,14 @@
                                     </td>
                                     <td>
                                         <div class="btn-group btn-group-sm">
-                                            <button class="btn btn-outline-primary" title="View Course">
+                                            <a href="{{ url_for('course_details', course_id=enrollment.id) }}" 
+                                               class="btn btn-outline-primary" title="View Course">
                                                 <i class="fas fa-eye"></i>
-                                            </button>
-                                            <button class="btn btn-outline-success" title="View Assignments">
+                                            </a>
+                                            <a href="{{ url_for('course_details', course_id=enrollment.id) }}" 
+                                               class="btn btn-outline-success" title="View Assignments">
                                                 <i class="fas fa-tasks"></i>
-                                            </button>
+                                            </a>
                                             <button class="btn btn-outline-info" title="Grades">
                                                 <i class="fas fa-chart-line"></i>
                                             </button>

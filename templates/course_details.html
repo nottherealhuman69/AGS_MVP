@@ -138,27 +138,21 @@
                                         <div class="d-flex justify-content-between align-items-center mb-3">
                                             <small class="text-muted">
                                                 <i class="fas fa-calendar me-1"></i>
-                                                Due: {{ assignment.deadline.strftime('%b %d, %Y') if assignment.deadline else 'No deadline' }}
+                                                {% if assignment.deadline %}
+                                                    Due: {{ assignment.deadline.strftime('%b %d, %Y') }}
+                                                {% else %}
+                                                    No deadline
+                                                {% endif %}
                                             </small>
                                             {% if assignment.deadline %}
-                                                {# Active/Expired Label based on deadline #}
-                                                {% if assignment.deadline > now %}
-                                                    <span class="badge bg-success">Active</span>
-                                                {% else %}
-                                                    <span class="badge bg-secondary">Expired</span>
-                                                {% endif %}
-
-                                                {# Display human-readable due date #}
-                                                Due: {{ assignment.deadline.strftime('%b %d, %Y') }}
-
-                                                {# Open/Closed Label based on deadline #}
-                                                {% if assignment.deadline > now %}
+                                                {# Check if assignment is still active #}
+                                                {% set current_time = moment() %}
+                                                {% if assignment.deadline > current_time %}
                                                     <span class="badge bg-success">Open</span>
                                                 {% else %}
                                                     <span class="badge bg-danger">Closed</span>
                                                 {% endif %}
                                             {% endif %}
-
                                         </div>
                                         
                                         <div class="d-flex gap-2">
@@ -260,12 +254,10 @@ function showInstructions(index) {
     }
 }
 
-// Add moment.js-like functionality for date handling
+// Add date handling functionality
 document.addEventListener('DOMContentLoaded', function() {
-    // This is a simple date comparison - in production you might want to use moment.js
-    const now = new Date();
-    
-    // You can add more JavaScript functionality here for dynamic date handling
+    // This is for any additional JavaScript functionality you might need
+    console.log('Course details page loaded');
 });
 </script>
 {% endblock %}

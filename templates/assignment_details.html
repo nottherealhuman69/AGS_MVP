@@ -16,8 +16,7 @@
                             </span>
                             {% if assignment.deadline %}
                                 {% set now = moment() %}
-                                {% set due_date = moment(assignment.deadline) %}
-                                {% if due_date > now %}
+                                {% if assignment.deadline|string > now|string %}
                                     <span class="badge bg-success">Open</span>
                                 {% else %}
                                     <span class="badge bg-danger">Closed</span>
@@ -34,7 +33,7 @@
                         {% if assignment.deadline %}
                         <p class="text-muted mb-0">
                             <i class="fas fa-calendar-alt me-1"></i>
-                            Due: {{ assignment.deadline.strftime('%B %d, %Y at %I:%M %p') }}
+                            Due: {{ assignment.deadline.strftime('%B %d, %Y at %I:%M %p') if assignment.deadline else 'No deadline set' }}
                         </p>
                         {% endif %}
                     </div>
@@ -66,7 +65,7 @@
                 </h5>
             </div>
             <div class="card-body">
-                <p class="mb-0">{{ assignment.description|nl2br }}</p>
+                <p class="mb-0">{{ assignment.description|replace('\n', '<br>')|safe }}</p>
             </div>
         </div>
     </div>
@@ -126,7 +125,7 @@
                     {% if submission %}
                         <i class="fas fa-check-circle fa-4x text-success mb-3"></i>
                         <h6>Submitted</h6>
-                        <p class="text-muted mb-3">Submitted on {{ submission.submitted_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
+                        <p class="text-muted mb-3">Submitted on {{ submission.submitted_at.strftime('%B %d, %Y at %I:%M %p') if submission.submitted_at else 'Unknown date' }}</p>
                         {% if submission.grade is not none %}
                             <div class="alert alert-success">
                                 <strong>Grade: {{ submission.grade }}/10</strong>
@@ -135,7 +134,7 @@
                                 <div class="mt-3">
                                     <h6>Feedback:</h6>
                                     <div class="text-start bg-light p-3 rounded">
-                                        {{ submission.feedback|nl2br }}
+                                        {{ submission.feedback|replace('\n', '<br>')|safe }}
                                     </div>
                                 </div>
                             {% endif %}
@@ -143,7 +142,8 @@
                             <span class="badge bg-warning">Pending Grade</span>
                         {% endif %}
                     {% else %}
-                        {% if assignment.deadline and assignment.deadline < moment() %}
+                        {% set current_time = moment() %}
+                        {% if assignment.deadline and assignment.deadline|string < current_time|string %}
                             <i class="fas fa-times-circle fa-4x text-danger mb-3"></i>
                             <h6 class="text-danger">Deadline Passed</h6>
                             <p class="text-muted">Submission no longer allowed</p>
@@ -194,7 +194,7 @@
                                     <td>
                                         <strong>{{ sub.username }}</strong>
                                     </td>
-                                    <td>{{ sub.submitted_at.strftime('%b %d, %Y %I:%M %p') }}</td>
+                                    <td>{{ sub.submitted_at.strftime('%b %d, %Y %I:%M %p') if sub.submitted_at else 'Unknown' }}</td>
                                     <td>
                                         {% if sub.grade is not none %}
                                             <span class="badge bg-success">{{ sub.grade }}/10</span>
@@ -239,7 +239,9 @@
 {% endif %}
 
 <!-- Student Submission Modal -->
-{% if session.user_type == 'student' and not submission and (not assignment.deadline or assignment.deadline > moment()) %}
+{% if session.user_type == 'student' and not submission %}
+{% set current_time = moment() %}
+{% if not assignment.deadline or assignment.deadline|string > current_time|string %}
 <div class="modal fade" id="submissionModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -277,6 +279,8 @@
     </div>
 </div>
 {% endif %}
+{% endif %}
+
 <!-- Modals for viewing content -->
 <div class="modal fade" id="instructionsModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -326,7 +330,7 @@
 </div>
 {% endif %}
 
-<div class="modal fade" id="submissionModal" tabindex="-1">
+<div class="modal fade" id="submissionViewModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
@@ -360,7 +364,7 @@ function showAnswerKey() {
 
 function showSubmission(submissionText) {
     document.getElementById('submissionContent').textContent = submissionText;
-    new bootstrap.Modal(document.getElementById('submissionModal')).show();
+    new bootstrap.Modal(document.getElementById('submissionViewModal')).show();
 }
 
 document.addEventListener('DOMContentLoaded', function() {

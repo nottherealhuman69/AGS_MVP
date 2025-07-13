@@ -22,6 +22,12 @@
                                     <span class="badge bg-danger">Closed</span>
                                 {% endif %}
                             {% endif %}
+                            <!-- AI Grading Indicator -->
+                            {% if assignment.answer_text or assignment.instructions_text %}
+                                <span class="badge bg-info ms-2">
+                                    <i class="fas fa-robot me-1"></i>AI Grading
+                                </span>
+                            {% endif %}
                         </div>
                         <h1 class="card-title mb-2">
                             <i class="fas fa-{% if assignment.event_type == 'assignment' %}file-alt{% elif assignment.event_type == 'quiz' %}question-circle{% elif assignment.event_type == 'exam' %}clipboard-check{% else %}project-diagram{% endif %} text-primary me-2"></i>
@@ -33,7 +39,7 @@
                         {% if assignment.deadline %}
                         <p class="text-muted mb-0">
                             <i class="fas fa-calendar-alt me-1"></i>
-                            Due: {{ assignment.deadline.strftime('%B %d, %Y at %I:%M %p') if assignment.deadline else 'No deadline set' }}
+                            Due: {{ assignment.deadline }}
                         </p>
                         {% endif %}
                     </div>
@@ -125,19 +131,63 @@
                     {% if submission %}
                         <i class="fas fa-check-circle fa-4x text-success mb-3"></i>
                         <h6>Submitted</h6>
-                        <p class="text-muted mb-3">Submitted on {{ submission.submitted_at.strftime('%B %d, %Y at %I:%M %p') if submission.submitted_at else 'Unknown date' }}</p>
-                        {% if submission.grade is not none %}
-                            <div class="alert alert-success">
-                                <strong>Grade: {{ submission.grade }}/10</strong>
+                        <p class="text-muted mb-3">Submitted on {{ submission.submitted_at.split(' ')[0] if submission.submitted_at else 'Unknown date' }}</p>
+                        
+                        <!-- Enhanced grading status display -->
+                        {% if submission.grading_status == 'completed' and submission.grade is not none %}
+                            <!-- Check if deadline has passed OR if user is professor -->
+                            {% set current_time = moment() %}
+                            {% if not assignment.deadline or assignment.deadline|string < current_time|string or session.user_type == 'professor' %}
+                                <div class="alert alert-success">
+                                    <div class="d-flex align-items-center justify-content-center mb-2">
+                                        <i class="fas fa-robot me-2"></i>
+                                        <strong>AI Graded: {{ submission.grade }}/10</strong>
+                                    </div>
+                                    {% if submission.graded_at %}
+                                        <small class="text-muted">
+                                            Graded on {{ submission.graded_at.split(' ')[0] }}
+                                        </small>
+                                    {% endif %}
+                                </div>
+                                {% if submission.feedback %}
+                                    <div class="mt-3">
+                                        <h6><i class="fas fa-comments me-2"></i>AI Feedback:</h6>
+                                        <div class="text-start bg-light p-3 rounded" style="max-height: 300px; overflow-y: auto;">
+                                            {{ submission.feedback|replace('\n', '<br>')|safe }}
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            {% else %}
+                                <div class="alert alert-info">
+                                    <i class="fas fa-clock me-2"></i>
+                                    <strong>Graded - Results available after deadline</strong>
+                                    <br>
+                                    <small>Your work has been automatically graded. Results will be visible on {{ assignment.deadline }}</small>
+                                </div>
+                            {% endif %}
+                        {% elif submission.grading_status == 'failed' %}
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <strong>Manual Grading Required</strong>
+                                <br>
+                                <small>Automatic grading failed. Your professor will grade manually.</small>
                             </div>
                             {% if submission.feedback %}
                                 <div class="mt-3">
-                                    <h6>Feedback:</h6>
+                                    <h6>System Message:</h6>
                                     <div class="text-start bg-light p-3 rounded">
                                         {{ submission.feedback|replace('\n', '<br>')|safe }}
                                     </div>
                                 </div>
                             {% endif %}
+                        {% elif submission.grading_status == 'pending' %}
+                            <div class="alert alert-info">
+                                <div class="d-flex align-items-center justify-content-center">
+                                    <div class="loading me-2"></div>
+                                    <strong>Grading in Progress...</strong>
+                                </div>
+                                <small>Please refresh the page in a few moments</small>
+                            </div>
                         {% else %}
                             <span class="badge bg-warning">Pending Grade</span>
                         {% endif %}
@@ -151,6 +201,12 @@
                             <i class="fas fa-upload fa-4x text-primary mb-3"></i>
                             <h6>Upload Your Answer</h6>
                             <p class="text-muted mb-3">Submit your work as a PDF</p>
+                            {% if assignment.answer_text or assignment.instructions_text %}
+                                <div class="alert alert-info mb-3">
+                                    <i class="fas fa-robot me-2"></i>
+                                    <small>This assignment will be automatically graded!</small>
+                                </div>
+                            {% endif %}
                             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#submissionModal">
                                 <i class="fas fa-upload me-2"></i>Submit Assignment
                             </button>
@@ -162,51 +218,76 @@
     </div>
 </div>
 
-<!-- Professor View: Submissions -->
+<!-- Professor View: Enhanced Submissions -->
 {% if session.user_type == 'professor' %}
 <div class="row">
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-users me-2"></i>Student Submissions
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-users me-2"></i>Student Submissions
+                        {% if submissions %}
+                            <span class="badge bg-primary ms-2">{{ submissions|length }}</span>
+                        {% endif %}
+                    </h5>
                     {% if submissions %}
-                        <span class="badge bg-primary ms-2">{{ submissions|length }}</span>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-sm btn-outline-info" onclick="filterSubmissions('all')">
+                                All ({{ submissions|length }})
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-success" onclick="filterSubmissions('completed')">
+                                Graded ({{ submissions|selectattr('grading_status', 'equalto', 'completed')|list|length }})
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-warning" onclick="filterSubmissions('pending')">
+                                Pending ({{ submissions|selectattr('grading_status', 'equalto', 'pending')|list|length }})
+                            </button>
+                        </div>
                     {% endif %}
-                </h5>
+                </div>
             </div>
             <div class="card-body">
                 {% if submissions %}
                     <div class="table-responsive">
-                        <table class="table table-hover">
+                        <table class="table table-hover" id="submissionsTable">
                             <thead>
                                 <tr>
                                     <th>Student</th>
                                     <th>Submitted</th>
                                     <th>Grade</th>
-                                    <th>Status</th>
+                                    <th>Grading Status</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for sub in submissions %}
-                                <tr>
+                                <tr data-status="{{ sub.grading_status }}">
                                     <td>
                                         <strong>{{ sub.username }}</strong>
                                     </td>
-                                    <td>{{ sub.submitted_at.strftime('%b %d, %Y %I:%M %p') if sub.submitted_at else 'Unknown' }}</td>
+                                    <td>{{ sub.submitted_at.split(' ')[0] if sub.submitted_at else 'Unknown' }}</td>
                                     <td>
                                         {% if sub.grade is not none %}
                                             <span class="badge bg-success">{{ sub.grade }}/10</span>
                                         {% else %}
-                                            <span class="badge bg-warning">Pending</span>
+                                            <span class="badge bg-warning">Not Graded</span>
                                         {% endif %}
                                     </td>
                                     <td>
-                                        {% if sub.feedback %}
-                                            <span class="badge bg-info">Feedback Given</span>
+                                        {% if sub.grading_status == 'completed' %}
+                                            <span class="badge bg-success">
+                                                <i class="fas fa-robot me-1"></i>AI Completed
+                                            </span>
+                                        {% elif sub.grading_status == 'failed' %}
+                                            <span class="badge bg-danger">
+                                                <i class="fas fa-exclamation-triangle me-1"></i>AI Failed
+                                            </span>
+                                        {% elif sub.grading_status == 'pending' %}
+                                            <span class="badge bg-info">
+                                                <i class="fas fa-clock me-1"></i>Processing
+                                            </span>
                                         {% else %}
-                                            <span class="badge bg-secondary">No Feedback</span>
+                                            <span class="badge bg-secondary">Manual Required</span>
                                         {% endif %}
                                     </td>
                                     <td>
@@ -215,8 +296,15 @@
                                                     class="btn btn-outline-primary" title="View Submission">
                                                 <i class="fas fa-eye"></i>
                                             </button>
-                                            <button class="btn btn-outline-success" title="Grade Submission">
-                                                <i class="fas fa-star"></i>
+                                            {% if sub.feedback %}
+                                            <button onclick="showFeedback('{{ sub.feedback|replace('\n', '\\n')|replace("'", "\\'") }}')" 
+                                                    class="btn btn-outline-info" title="View Feedback">
+                                                <i class="fas fa-comments"></i>
+                                            </button>
+                                            {% endif %}
+                                            <button class="btn btn-outline-success" title="Manual Override" 
+                                                    onclick="openManualGrading('{{ sub.username }}', {{ sub.grade if sub.grade else 0 }}, '{{ sub.feedback|replace('\n', '\\n')|replace("'", "\\'") if sub.feedback else '' }}')">
+                                                <i class="fas fa-edit"></i>
                                             </button>
                                         </div>
                                     </td>
@@ -251,7 +339,7 @@
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form action="/submit_assignment/{{ assignment.id }}" method="POST" enctype="multipart/form-data">
+            <form action="/submit_assignment/{{ assignment.id }}" method="POST" enctype="multipart/form-data" onsubmit="showSubmissionProgress()">
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="submission_file" class="form-label">
@@ -263,14 +351,20 @@
                             Maximum file size: 16MB. Only PDF files are accepted.
                         </small>
                     </div>
+                    {% if assignment.answer_text or assignment.instructions_text %}
                     <div class="alert alert-info">
+                        <i class="fas fa-robot me-2"></i>
+                        <strong>AI Grading Enabled:</strong> Your submission will be automatically graded within moments of upload. You'll receive detailed feedback and a score.
+                    </div>
+                    {% endif %}
+                    <div class="alert alert-warning">
                         <i class="fas fa-info-circle me-2"></i>
                         <strong>Note:</strong> Once submitted, you cannot change your submission. Make sure your PDF is complete and readable.
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
                         <i class="fas fa-upload me-2"></i>Submit Assignment
                     </button>
                 </div>
@@ -351,6 +445,27 @@
     </div>
 </div>
 
+<div class="modal fade" id="feedbackModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-comments me-2"></i>AI Feedback
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="feedbackContent" style="white-space: pre-wrap; font-family: system-ui; background: #f8f9fa; padding: 20px; border-radius: 5px; max-height: 60vh; overflow-y: auto;">
+                    <!-- Feedback content will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 function showInstructions() {
     new bootstrap.Modal(document.getElementById('instructionsModal')).show();
@@ -365,6 +480,42 @@ function showAnswerKey() {
 function showSubmission(submissionText) {
     document.getElementById('submissionContent').textContent = submissionText;
     new bootstrap.Modal(document.getElementById('submissionViewModal')).show();
+}
+
+function showFeedback(feedbackText) {
+    document.getElementById('feedbackContent').innerHTML = feedbackText.replace(/\n/g, '<br>');
+    new bootstrap.Modal(document.getElementById('feedbackModal')).show();
+}
+
+function filterSubmissions(status) {
+    const rows = document.querySelectorAll('#submissionsTable tbody tr');
+    rows.forEach(row => {
+        if (status === 'all' || row.dataset.status === status) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    
+    // Update button states
+    document.querySelectorAll('.btn-group .btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+}
+
+function showSubmissionProgress() {
+    const submitBtn = document.getElementById('submitBtn');
+    if (submitBtn) {
+        submitBtn.innerHTML = '<div class="loading me-2"></div>Submitting...';
+        submitBtn.disabled = true;
+    }
+}
+
+function openManualGrading(studentName, currentGrade, currentFeedback) {
+    // This would open a modal for manual grading override
+    // Implementation would depend on your requirements
+    alert(`Manual grading for ${studentName} would be implemented here.\nCurrent grade: ${currentGrade}\nCurrent feedback: ${currentFeedback.substring(0, 100)}...`);
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -387,6 +538,43 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // Auto-refresh for pending submissions (for students)
+    {% if session.user_type == 'student' and submission and submission.grading_status == 'pending' %}
+    setTimeout(function() {
+        window.location.reload();
+    }, 10000); // Refresh after 10 seconds if grading is pending
+    {% endif %}
 });
 </script>
+
+<style>
+.loading {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.btn-group .btn.active {
+    background-color: var(--bs-primary);
+    color: white;
+}
+
+.table-responsive {
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+.badge {
+    font-size: 0.75em;
+}
+</style>
 {% endblock %}

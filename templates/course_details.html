@@ -106,6 +106,12 @@
                                             <span class="badge bg-{% if assignment.event_type == 'assignment' %}primary{% else %}success{% endif %} mb-2">
                                                 {{ assignment.event_type.title() }}
                                             </span>
+                                            <!-- AI Grading Indicator -->
+                                            {% if assignment.answer_text or assignment.instructions_text %}
+                                                <span class="badge bg-info">
+                                                    <i class="fas fa-robot me-1"></i>AI
+                                                </span>
+                                            {% endif %}
                                         </div>
                                         <div class="dropdown">
                                             <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown">
@@ -131,7 +137,7 @@
                                     <h6 class="card-title">{{ assignment.event_name }}</h6>
                                     
                                     <p class="card-text flex-grow-1">
-                                        {{ assignment.description[:100] }}{% if assignment.description|length > 100 %}...{% endif %}
+                                        {{ assignment.description[:100] }}{% if assignment.description and assignment.description|length > 100 %}...{% endif %}
                                     </p>
                                     
                                     <div class="mt-auto">

@@ -41,6 +41,71 @@ def extract_text_from_pdf(pdf_file):
         print(f"PDF text extraction failed: {e}")
         return None
 
+# Quick fix for app.py - add this to your perform_immediate_grading function
+
+def perform_immediate_grading(assignment, submission_text, student_id):
+    """
+    Perform immediate AI grading when student submits assignment
+    Returns tuple: (grade, feedback, success)
+    """
+    try:
+        # Import the fixed grading function
+        from automated_grading import get_enhanced_response, extract_grade_from_response
+        
+        # Prepare the grading inputs
+        instructions_text = assignment.get('instructions_text', '')
+        answer_key_text = assignment.get('answer_text', '')
+        
+        print(f"🤖 Starting AI grading for student {student_id}")
+        print(f"📝 Instructions available: {'Yes' if instructions_text else 'No'}")
+        print(f"🔑 Answer key available: {'Yes' if answer_key_text else 'No'}")
+        
+        # Check if we have sufficient content for grading
+        if not answer_key_text and not instructions_text:
+            print("⚠️  No answer key or instructions - skipping AI grading")
+            return None, "Manual grading required - no answer key or instructions provided.", False
+        
+        # Call the enhanced grading function
+        grading_result = get_enhanced_response(
+            instructions_text=instructions_text,
+            answer_key_text=answer_key_text,
+            student_answer_text=submission_text
+        )
+        
+        # Extract grade and feedback
+        grade, feedback = extract_grade_from_response(grading_result)
+        
+        if grade is not None:
+            print(f"✅ AI grading completed - Grade: {grade}/10")
+            return grade, feedback, True
+        else:
+            print("⚠️  AI grading completed but no grade extracted")
+            return None, feedback, False
+        
+    except ImportError as e:
+        print(f"❌ Import error - automated_grading module not found: {e}")
+        error_feedback = """
+AI Grading Module Error
+
+The automated grading system is not properly configured. Your professor has been notified and will grade your assignment manually.
+
+Your submission has been recorded successfully.
+"""
+        return None, error_feedback, False
+        
+    except Exception as e:
+        print(f"❌ AI grading failed: {e}")
+        error_feedback = f"""
+AI Grading Error
+
+Unfortunately, automatic grading failed for your submission. Your professor has been notified and will grade your assignment manually.
+
+Error details: {str(e)}
+
+Your submission has been recorded successfully and you will receive your grade once manual grading is complete.
+"""
+        return None, error_feedback, False
+
 # Database setup
 def init_db():
     conn = sqlite3.connect('ags.db')
@@ -90,7 +155,7 @@ def init_db():
         FOREIGN KEY (course_id) REFERENCES courses (id)
     )''')
     
-    # Submissions table
+    # Enhanced submissions table with grading metadata
     c.execute('''CREATE TABLE IF NOT EXISTS submissions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         event_id INTEGER,
@@ -98,10 +163,23 @@ def init_db():
         submission_text TEXT,
         grade INTEGER,
         feedback TEXT,
+        grading_status TEXT DEFAULT 'pending',
+        graded_at TIMESTAMP,
         submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (event_id) REFERENCES events (id),
         FOREIGN KEY (student_id) REFERENCES users (id)
     )''')
+    
+    # Add new columns to existing submissions table if they don't exist
+    try:
+        c.execute('ALTER TABLE submissions ADD COLUMN grading_status TEXT DEFAULT "pending"')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    
+    try:
+        c.execute('ALTER TABLE submissions ADD COLUMN graded_at TIMESTAMP')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     
     conn.commit()
     conn.close()
@@ -299,11 +377,8 @@ def course_details(course_id):
     assignments = []
     for row in rows:
         a = dict(row)  # Convert sqlite3.Row to a dict
-        if a['deadline']:
-            try:
-                a['deadline'] = datetime.strptime(a['deadline'], '%Y-%m-%d %H:%M:%S')
-            except ValueError:
-                a['deadline'] = None
+        # Safely parse deadline
+        a['deadline'] = safe_datetime_parse(a['deadline'])
         assignments.append(a)
 
     professor = conn.execute('SELECT username FROM users WHERE id = ?', 
@@ -389,20 +464,25 @@ def create_assignment(course_id):
     conn.close()
     return render_template('create_assignment.html', course=course)
 
+# Update your assignment_details route to convert datetime objects properly
 @app.route('/assignment/<int:assignment_id>')
 def assignment_details(assignment_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
     conn = get_db()
-    assignment = conn.execute('''SELECT e.*, c.course_name, c.professor_id, c.id as course_id
+    assignment_row = conn.execute('''SELECT e.*, c.course_name, c.professor_id, c.id as course_id
                                FROM events e 
                                JOIN courses c ON e.course_id = c.id 
                                WHERE e.id = ?''', (assignment_id,)).fetchone()
     
-    if not assignment:
+    if not assignment_row:
         flash('Assignment not found')
         return redirect(url_for('index'))
+    
+    # Convert to dict and handle datetime
+    assignment = dict(assignment_row)
+    assignment['deadline'] = safe_datetime_parse(assignment['deadline'])
     
     # Check access permissions
     if session['user_type'] == 'professor':
@@ -419,21 +499,26 @@ def assignment_details(assignment_id):
     # Get submission if student
     submission = None
     if session['user_type'] == 'student':
-        submission = conn.execute('SELECT * FROM submissions WHERE event_id = ? AND student_id = ?',
+        submission_row = conn.execute('SELECT * FROM submissions WHERE event_id = ? AND student_id = ?',
                                 (assignment_id, session['user_id'])).fetchone()
+        if submission_row:
+            submission = dict(submission_row)
     
     # Get all submissions if professor
     submissions = None
     if session['user_type'] == 'professor':
-        submissions = conn.execute('''SELECT s.*, u.username 
+        submission_rows = conn.execute('''SELECT s.*, u.username 
                                     FROM submissions s 
                                     JOIN users u ON s.student_id = u.id 
-                                    WHERE s.event_id = ?''', (assignment_id,)).fetchall()
+                                    WHERE s.event_id = ? 
+                                    ORDER BY s.submitted_at DESC''', (assignment_id,)).fetchall()
+        submissions = [dict(row) for row in submission_rows]
     
     conn.close()
     
     return render_template('assignment_details.html', assignment=assignment, 
                          submission=submission, submissions=submissions)
+
 
 @app.route('/submit_assignment/<int:assignment_id>', methods=['POST'])
 def submit_assignment(assignment_id):
@@ -481,60 +566,87 @@ def submit_assignment(assignment_id):
         flash('Failed to extract text from your PDF. Please ensure it contains readable text.')
         return redirect(url_for('assignment_details', assignment_id=assignment_id))
     
-    # Save submission to database
-    conn.execute('''INSERT INTO submissions (event_id, student_id, submission_text) 
-                    VALUES (?, ?, ?)''',
-                (assignment_id, session['user_id'], submission_text))
+    # Save submission to database first (with pending status)
+    conn.execute('''INSERT INTO submissions (event_id, student_id, submission_text, grading_status) 
+                    VALUES (?, ?, ?, ?)''',
+                (assignment_id, session['user_id'], submission_text, 'pending'))
     conn.commit()
     
-    # If there's an answer key, trigger automatic grading
-    if assignment['answer_text']:
-        try:
-            # Import your grading function
-            from automated_grading import get_response
-            
-            # Get automated grade and feedback
-            grading_result = get_response(assignment['answer_text'], submission_text)
-            
-            # Parse the grading result to extract grade and feedback
-            lines = grading_result.strip().split('\n')
-            grade = None
-            feedback = grading_result
-            
-            # Try to extract numeric grade
-            for line in lines:
-                if 'Grade:' in line:
-                    try:
-                        grade_part = line.split('Grade:')[1].split('/')[0].strip()
-                        grade = int(grade_part)
-                        break
-                    except:
-                        pass
-            
-            # Update submission with grade and feedback
-            conn.execute('''UPDATE submissions SET grade = ?, feedback = ? 
+    print(f"📄 Submission saved for student {session['user_id']} on assignment {assignment_id}")
+    
+    # Perform immediate AI grading if answer key exists
+    if assignment['answer_text'] or assignment['instructions_text']:
+        print(f"🤖 Starting immediate AI grading...")
+        
+        # Convert assignment row to dict for grading function
+        assignment_dict = dict(assignment)
+        
+        grade, feedback, success = perform_immediate_grading(
+            assignment_dict, 
+            submission_text, 
+            session['user_id']
+        )
+        
+        # Update submission with grading results
+        if success and grade is not None:
+            conn.execute('''UPDATE submissions 
+                           SET grade = ?, feedback = ?, grading_status = ?, graded_at = CURRENT_TIMESTAMP 
                            WHERE event_id = ? AND student_id = ?''',
-                        (grade, feedback, assignment_id, session['user_id']))
-            conn.commit()
-            
-            flash('Assignment submitted successfully! Automatic grading complete.')
-            
-        except Exception as e:
-            # If automatic grading fails, still save the submission
-            flash('Assignment submitted successfully! Grading will be done manually.')
-            print(f"Automatic grading failed: {e}")
+                        (grade, feedback, 'completed', assignment_id, session['user_id']))
+            flash('Assignment submitted successfully! ✅ Automatic grading completed.')
+        else:
+            # AI grading failed, but save the feedback anyway
+            conn.execute('''UPDATE submissions 
+                           SET feedback = ?, grading_status = ? 
+                           WHERE event_id = ? AND student_id = ?''',
+                        (feedback, 'failed', assignment_id, session['user_id']))
+            flash('Assignment submitted successfully! ⚠️ Automatic grading failed - manual grading required.')
+        
+        conn.commit()
     else:
-        flash('Assignment submitted successfully!')
+        # No answer key available, manual grading required
+        flash('Assignment submitted successfully! 📝 Manual grading will be performed by your professor.')
     
     conn.close()
     return redirect(url_for('assignment_details', assignment_id=assignment_id))
+# Add these helper functions to your app.py
 
+def safe_datetime_parse(date_string):
+    """Safely parse datetime string"""
+    if not date_string:
+        return None
+    if isinstance(date_string, datetime):
+        return date_string
+    try:
+        return datetime.strptime(date_string, '%Y-%m-%d %H:%M:%S')
+    except (ValueError, TypeError):
+        return None
+
+def format_datetime_for_display(date_obj_or_string):
+    """Format datetime for display in templates"""
+    if isinstance(date_obj_or_string, str):
+        dt = safe_datetime_parse(date_obj_or_string)
+        if dt:
+            return dt.strftime('%B %d, %Y at %I:%M %p')
+        else:
+            return date_obj_or_string  # Return as-is if parsing fails
+    elif isinstance(date_obj_or_string, datetime):
+        return date_obj_or_string.strftime('%B %d, %Y at %I:%M %p')
+    else:
+        return 'No date set'
+
+# Add this template filter to your Flask app
+@app.template_filter('format_datetime')
+def format_datetime_filter(date_value):
+    """Template filter for formatting dates"""
+    return format_datetime_for_display(date_value)
 if __name__ == '__main__':
-    print("Starting AGS application...")
+    print("Starting Enhanced AGS application...")
     try:
         print("Initializing database...")
         init_db()
         print("Database initialized successfully!")
+        print("🤖 AI grading system ready!")
         print("Starting Flask app on http://localhost:5000")
         app.run(debug=True, host='0.0.0.0', port=5000)
     except Exception as e:
@@ -542,3 +654,4 @@ if __name__ == '__main__':
         import traceback
         traceback.print_exc()
         input("Press Enter to exit...")
+

@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Student Dashboard - AGS{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h1 class="card-title mb-0">
+                            <i class="fas fa-user-graduate text-primary me-2"></i>
+                            Student Dashboard
+                        </h1>
+                        <p class="text-muted mb-0">Track your courses and assignments</p>
+                    </div>
+                    <div>
+                        <a href="{{ url_for('enroll_course') }}" class="btn btn-primary">
+                            <i class="fas fa-plus me-2"></i>Enroll in Course
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-3 mb-4">
+        <div class="card dashboard-card text-center">
+            <div class="card-body">
+                <i class="fas fa-book fa-3x text-primary mb-3"></i>
+                <h5 class="card-title">Enrolled Courses</h5>
+                <h2 class="text-primary">{{ enrollments|length }}</h2>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-4">
+        <div class="card dashboard-card text-center">
+            <div class="card-body">
+                <i class="fas fa-tasks fa-3x text-warning mb-3"></i>
+                <h5 class="card-title">Pending Assignments</h5>
+                <h2 class="text-warning">0</h2>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-4">
+        <div class="card dashboard-card text-center">
+            <div class="card-body">
+                <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                <h5 class="card-title">Completed</h5>
+                <h2 class="text-success">0</h2>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-4">
+        <div class="card dashboard-card text-center">
+            <div class="card-body">
+                <i class="fas fa-star fa-3x text-info mb-3"></i>
+                <h5 class="card-title">Average Grade</h5>
+                <h2 class="text-info">-</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-list me-2"></i>My Courses
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if enrollments %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Course Name</th>
+                                    <th>Course Code</th>
+                                    <th>Enrolled Date</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for enrollment in enrollments %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ enrollment.course_name }}</strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-primary">{{ enrollment.course_code }}</span>
+                                    </td>
+                                    <td>{{ enrollment.enrolled_at.split(' ')[0] }}</td>
+                                    <td>
+                                        <span class="badge bg-success">Active</span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('course_details', course_id=enrollment.id) }}" 
+                                               class="btn btn-outline-primary" title="View Course">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <a href="{{ url_for('course_details', course_id=enrollment.id) }}" 
+                                               class="btn btn-outline-success" title="View Assignments">
+                                                <i class="fas fa-tasks"></i>
+                                            </a>
+                                            <button class="btn btn-outline-info" title="Grades">
+                                                <i class="fas fa-chart-line"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-book-open fa-4x text-muted mb-3 floating-icon"></i>
+                        <h4 class="text-muted">No courses enrolled yet</h4>
+                        <p class="text-muted">Join your first course to get started!</p>
+                        <a href="{{ url_for('enroll_course') }}" class="btn btn-primary pulse">
+                            <i class="fas fa-plus me-2"></i>Enroll in Course
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-calendar-alt me-2"></i>Upcoming Deadlines
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="text-center py-3">
+                    <i class="fas fa-calendar-check fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">No upcoming deadlines</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-trophy me-2"></i>Recent Grades
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="text-center py-3">
+                    <i class="fas fa-medal fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">No grades yet</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

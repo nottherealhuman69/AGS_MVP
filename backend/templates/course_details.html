@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}{{ course.course_name }} - AGS{% endblock %}
+
+{% block content %}
+<!-- Course Header -->
+<div class="row">
+    <div class="col-12">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h1 class="card-title mb-2">
+                            <i class="fas fa-book-open text-primary me-2"></i>
+                            {{ course.course_name }}
+                        </h1>
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="badge bg-primary me-3">{{ course.course_code }}</span>
+                            <span class="text-muted">
+                                <i class="fas fa-user me-1"></i>{{ professor.username }}
+                            </span>
+                            <span class="text-muted ms-3">
+                                <i class="fas fa-users me-1"></i>{{ enrollment_count }} students
+                            </span>
+                        </div>
+                        <p class="text-muted mb-0">
+                            <i class="fas fa-calendar me-1"></i>
+                            Created {{ course.created_at.split(' ')[0] }}
+                        </p>
+                    </div>
+                    <div>
+                        {% if session.user_type == 'professor' %}
+                        <a href="{{ url_for('create_assignment', course_id=course.id) }}" class="btn btn-primary">
+                            <i class="fas fa-plus me-2"></i>Create Assignment
+                        </a>
+                        {% endif %}
+                        <a href="{{ url_for('professor_dashboard' if session.user_type == 'professor' else 'student_dashboard') }}" 
+                           class="btn btn-outline-secondary ms-2">
+                            <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Course Statistics -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card dashboard-card text-center">
+            <div class="card-body">
+                <i class="fas fa-tasks fa-3x text-primary mb-3"></i>
+                <h5 class="card-title">Total Assignments</h5>
+                <h2 class="text-primary">{{ assignments|length }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card dashboard-card text-center">
+            <div class="card-body">
+                <i class="fas fa-clock fa-3x text-warning mb-3"></i>
+                <h5 class="card-title">Active</h5>
+                <h2 class="text-warning">{{ active_count }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card dashboard-card text-center">
+            <div class="card-body">
+                <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                <h5 class="card-title">Completed</h5>
+                <h2 class="text-success">0</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card dashboard-card text-center">
+            <div class="card-body">
+                <i class="fas fa-users fa-3x text-info mb-3"></i>
+                <h5 class="card-title">Students</h5>
+                <h2 class="text-info">{{ enrollment_count }}</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Assignments List -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-list me-2"></i>Assignments & Quizzes
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if assignments %}
+                    <div class="row">
+                        {% for assignment in assignments %}
+                        <div class="col-md-6 col-lg-4 mb-4">
+                            <div class="card assignment-card h-100">
+                                <div class="card-body d-flex flex-column">
+                                    <div class="d-flex justify-content-between align-items-start mb-3">
+                                        <div>
+                                            <span class="badge bg-{% if assignment.event_type == 'assignment' %}primary{% else %}success{% endif %} mb-2">
+                                                {{ assignment.event_type.title() }}
+                                            </span>
+                                            <!-- AI Grading Indicator -->
+                                            {% if assignment.answer_text or assignment.instructions_text %}
+                                                <span class="badge bg-info">
+                                                    <i class="fas fa-robot me-1"></i>AI
+                                                </span>
+                                            {% endif %}
+                                        </div>
+                                        <div class="dropdown">
+                                            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown">
+                                                <i class="fas fa-ellipsis-v"></i>
+                                            </button>
+                                            <ul class="dropdown-menu">
+                                                <li>
+                                                    <a class="dropdown-item" href="{{ url_for('assignment_details', assignment_id=assignment.id) }}">
+                                                        <i class="fas fa-eye me-2"></i>View Details
+                                                    </a>
+                                                </li>
+                                                {% if assignment.instructions_text %}
+                                                <li>
+                                                    <a class="dropdown-item" href="#" onclick="showInstructions({{ loop.index0 }})">
+                                                        <i class="fas fa-eye me-2"></i>View Instructions
+                                                    </a>
+                                                </li>
+                                                {% endif %}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    
+                                    <h6 class="card-title">{{ assignment.event_name }}</h6>
+                                    
+                                    <p class="card-text flex-grow-1">
+                                        {{ assignment.description[:100] }}{% if assignment.description and assignment.description|length > 100 %}...{% endif %}
+                                    </p>
+                                    
+                                    <div class="mt-auto">
+                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                            <small class="text-muted">
+                                                <i class="fas fa-calendar me-1"></i>
+                                                {% if assignment.deadline %}
+                                                    Due: {{ assignment.deadline.strftime('%b %d, %Y') }}
+                                                {% else %}
+                                                    No deadline
+                                                {% endif %}
+                                            </small>
+                                            {% if assignment.deadline %}
+                                                {# Check if assignment is still active #}
+                                                {% set current_time = moment() %}
+                                                {% if assignment.deadline > current_time %}
+                                                    <span class="badge bg-success">Open</span>
+                                                {% else %}
+                                                    <span class="badge bg-danger">Closed</span>
+                                                {% endif %}
+                                            {% endif %}
+                                        </div>
+                                        
+                                        <div class="d-flex gap-2">
+                                            <a href="{{ url_for('assignment_details', assignment_id=assignment.id) }}" 
+                                               class="btn btn-primary btn-sm flex-fill">
+                                                <i class="fas fa-eye me-1"></i>View
+                                            </a>
+                                            {% if assignment.instructions_text %}
+                                            <button onclick="showInstructions({{ loop.index0 }})" 
+                                                    class="btn btn-outline-info btn-sm">
+                                                <i class="fas fa-file-alt"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-clipboard-list fa-4x text-muted mb-3 floating-icon"></i>
+                        <h4 class="text-muted">No assignments yet</h4>
+                        <p class="text-muted">
+                            {% if session.user_type == 'professor' %}
+                                Create your first assignment to get started!
+                            {% else %}
+                                Your professor will add assignments here.
+                            {% endif %}
+                        </p>
+                        {% if session.user_type == 'professor' %}
+                        <a href="{{ url_for('create_assignment', course_id=course.id) }}" class="btn btn-primary">
+                            <i class="fas fa-plus me-2"></i>Create Assignment
+                        </a>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.assignment-card {
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.assignment-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+}
+
+.assignment-card .card-body {
+    background: rgba(255, 255, 255, 0.05);
+}
+</style>
+
+<!-- Instructions Modal -->
+<div class="modal fade" id="instructionsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-alt me-2"></i>Assignment Instructions
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="instructionsContent" style="white-space: pre-wrap; font-family: 'Courier New', monospace; background: #f8f9fa; padding: 20px; border-radius: 5px; max-height: 60vh; overflow-y: auto;">
+                    <!-- Instructions text will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Store assignments data for JavaScript access
+const assignmentsData = [
+    {% for assignment in assignments %}
+    {
+        instructions: {{ assignment.instructions_text|tojson if assignment.instructions_text else 'null' }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+];
+
+function showInstructions(index) {
+    const assignment = assignmentsData[index];
+    if (assignment && assignment.instructions) {
+        document.getElementById('instructionsContent').textContent = assignment.instructions;
+        new bootstrap.Modal(document.getElementById('instructionsModal')).show();
+    } else {
+        alert('No instructions available for this assignment.');
+    }
+}
+
+// Add date handling functionality
+document.addEventListener('DOMContentLoaded', function() {
+    // This is for any additional JavaScript functionality you might need
+    console.log('Course details page loaded');
+});
+</script>
+{% endblock %}

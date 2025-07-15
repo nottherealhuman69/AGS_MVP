@@ -340,7 +340,7 @@ function AssignmentDetails() {
                         <Clock className="mx-auto mb-2" size={20} />
                         <strong className="text-blue-300">Graded - Results available after deadline</strong>
                         <p className="text-white/60 text-sm mt-2">
-                          Your work has been automatically graded. Results will be visible on {new Date(assignment.deadline).toLocaleDateString()}
+                          Your work has been automatically graded. Results will be visible on {new Date(assignment.deadline).toLocaleString()}
                         </p>
                       </div>
                     )

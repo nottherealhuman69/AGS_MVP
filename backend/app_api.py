@@ -327,6 +327,181 @@ def api_create_assignment(course_id):
     
     return jsonify({'success': True})
 
+# Add these endpoints to your app_api.py file
+
+
+@app.route('/api/assignments/<int:assignment_id>', methods=['GET'])
+def api_get_assignment_details(assignment_id):
+    if 'user_id' not in session:
+        return jsonify({'message': 'Unauthorized'}), 401
+    
+    conn = get_db()
+    assignment = conn.execute('''SELECT e.*, c.course_name, c.professor_id, c.id as course_id
+                               FROM events e 
+                               JOIN courses c ON e.course_id = c.id 
+                               WHERE e.id = ?''', (assignment_id,)).fetchone()
+    
+    if not assignment:
+        conn.close()
+        return jsonify({'message': 'Assignment not found'}), 404
+    
+    # Check access permissions
+    if session['user_type'] == 'professor':
+        if assignment['professor_id'] != session['user_id']:
+            conn.close()
+            return jsonify({'message': 'Access denied'}), 403
+    else:  # student
+        enrollment = conn.execute('SELECT * FROM enrollments WHERE student_id = ? AND course_id = ?',
+                                (session['user_id'], assignment['course_id'])).fetchone()
+        if not enrollment:
+            conn.close()
+            return jsonify({'message': 'Not enrolled'}), 403
+    
+    # Get submission if student
+    submission = None
+    if session['user_type'] == 'student':
+        submission_row = conn.execute('SELECT * FROM submissions WHERE event_id = ? AND student_id = ?',
+                                (assignment_id, session['user_id'])).fetchone()
+        if submission_row:
+            submission = dict(submission_row)
+    
+    # Get all submissions if professor
+    submissions = None
+    if session['user_type'] == 'professor':
+        submission_rows = conn.execute('''SELECT s.*, u.username 
+                                    FROM submissions s 
+                                    JOIN users u ON s.student_id = u.id 
+                                    WHERE s.event_id = ? 
+                                    ORDER BY s.submitted_at DESC''', (assignment_id,)).fetchall()
+        submissions = [dict(row) for row in submission_rows]
+    
+    conn.close()
+    
+    return jsonify({
+        'assignment': dict(assignment),
+        'submission': submission,
+        'submissions': submissions
+    })
+
+@app.route('/api/assignments/<int:assignment_id>/submit', methods=['POST'])
+def api_submit_assignment(assignment_id):
+    if 'user_id' not in session or session['user_type'] != 'student':
+        return jsonify({'message': 'Unauthorized'}), 401
+    
+    conn = get_db()
+    assignment = conn.execute('''SELECT e.*, c.professor_id, e.course_id
+                               FROM events e 
+                               JOIN courses c ON e.course_id = c.id 
+                               WHERE e.id = ?''', (assignment_id,)).fetchone()
+    
+    if not assignment:
+        conn.close()
+        return jsonify({'success': False, 'message': 'Assignment not found'}), 404
+    
+    # Check if student is enrolled
+    enrollment = conn.execute('SELECT * FROM enrollments WHERE student_id = ? AND course_id = ?',
+                            (session['user_id'], assignment['course_id'])).fetchone()
+    if not enrollment:
+        conn.close()
+        return jsonify({'success': False, 'message': 'Not enrolled in course'}), 403
+    
+    # Check if deadline has passed
+    if assignment['deadline']:
+        try:
+            deadline = datetime.strptime(str(assignment['deadline']), '%Y-%m-%d %H:%M:%S')
+            if datetime.now() > deadline:
+                conn.close()
+                return jsonify({'success': False, 'message': 'Assignment deadline has passed'}), 400
+        except ValueError:
+            pass  # Continue if deadline format is different
+    
+    # Check if already submitted
+    existing_submission = conn.execute('SELECT * FROM submissions WHERE event_id = ? AND student_id = ?',
+                                     (assignment_id, session['user_id'])).fetchone()
+    if existing_submission:
+        conn.close()
+        return jsonify({'success': False, 'message': 'Already submitted'}), 400
+    
+    # Handle file upload and extract text
+    if 'submission_file' not in request.files:
+        conn.close()
+        return jsonify({'success': False, 'message': 'No file uploaded'}), 400
+    
+    submission_file = request.files['submission_file']
+    if not submission_file or not allowed_file(submission_file.filename):
+        conn.close()
+        return jsonify({'success': False, 'message': 'Please upload a valid PDF file'}), 400
+    
+    # Extract text from submission PDF using your existing function
+    submission_text = extract_text_from_pdf(submission_file)
+    if not submission_text:
+        conn.close()
+        return jsonify({'success': False, 'message': 'Failed to extract text from PDF'}), 400
+    
+    # Save submission to database first
+    conn.execute('''INSERT INTO submissions (event_id, student_id, submission_text) 
+                    VALUES (?, ?, ?)''',
+                (assignment_id, session['user_id'], submission_text))
+    conn.commit()
+    
+    # Perform AI grading using your existing automated_grading.py
+    try:
+        from automated_grading import get_enhanced_response
+        
+        instructions_text = assignment.get('instructions_text', '') or ''
+        answer_key_text = assignment.get('answer_text', '') or ''
+        
+        # Get AI grading
+        grading_response = get_enhanced_response(instructions_text, answer_key_text, submission_text)
+        
+        # Extract grade from response (simple extraction)
+        grade = None
+        try:
+            import re
+            grade_match = re.search(r'Grade:\s*(\d+)', grading_response)
+            if grade_match:
+                grade = int(grade_match.group(1))
+        except:
+            grade = None
+        
+        # Update submission with grade and feedback
+        conn.execute('''UPDATE submissions 
+                       SET grade = ?, feedback = ? 
+                       WHERE event_id = ? AND student_id = ?''',
+                    (grade, grading_response, assignment_id, session['user_id']))
+        conn.commit()
+        
+    except Exception as e:
+        print(f"AI grading failed: {e}")
+        # Continue without grading - can be done manually later
+    
+    conn.close()
+    return jsonify({'success': True, 'message': 'Assignment submitted successfully!'})
+
+@app.route('/api/courses/<int:course_id>/students', methods=['GET'])
+def api_get_course_students(course_id):
+    if 'user_id' not in session or session['user_type'] != 'professor':
+        return jsonify({'message': 'Unauthorized'}), 401
+    
+    conn = get_db()
+    course = conn.execute('SELECT * FROM courses WHERE id = ? AND professor_id = ?',
+                         (course_id, session['user_id'])).fetchone()
+    
+    if not course:
+        conn.close()
+        return jsonify({'message': 'Course not found or access denied'}), 404
+    
+    students = conn.execute('''SELECT u.id, u.username, u.email, e.enrolled_at 
+                              FROM users u 
+                              JOIN enrollments e ON u.id = e.student_id 
+                              WHERE e.course_id = ? 
+                              ORDER BY e.enrolled_at DESC''', (course_id,)).fetchall()
+    
+    conn.close()
+    return jsonify([dict(student) for student in students])
+
+
+
 if __name__ == '__main__':
     print("Starting AGS API server...")
     try:

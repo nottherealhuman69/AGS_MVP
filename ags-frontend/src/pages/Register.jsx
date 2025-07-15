@@ -1,75 +1,75 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import axios from 'axios'
-import { UserPlus, User, Mail, Lock, Tag } from 'lucide-react'
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { UserPlus, User, Mail, Lock, UserCheck } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import Alert from '../components/Alert';
 
-const Register = () => {
-  const navigate = useNavigate()
+function Register() {
   const [formData, setFormData] = useState({
     username: '',
     email: '',
     password: '',
     user_type: ''
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  });
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const { register } = useAuth();
+  const navigate = useNavigate();
 
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
-    })
-  }
+    });
+    setError('');
+    setSuccess('');
+  };
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    setSuccess('')
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
-    try {
-      const response = await axios.post('/api/auth/register', formData)
-      
-      if (response.data.success) {
-        setSuccess('Registration successful! Redirecting to login...')
-        setTimeout(() => {
-          navigate('/login')
-        }, 2000)
-      }
-    } catch (error) {
-      setError(error.response?.data?.message || 'Registration failed')
-    } finally {
-      setLoading(false)
+    const result = await register(formData);
+    
+    if (result.success) {
+      setSuccess(result.message);
+      setTimeout(() => {
+        navigate('/login');
+      }, 2000);
+    } else {
+      setError(result.error);
     }
-  }
+    
+    setLoading(false);
+  };
 
   return (
-    <div className="flex justify-center items-center min-h-[80vh]">
-      <div className="w-full max-w-md">
-        <div className="card p-8">
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="max-w-md w-full">
+        <div className="glass-card p-8">
+          {/* Header */}
           <div className="text-center mb-8">
-            <UserPlus className="h-16 w-16 text-primary-500 mx-auto mb-4" />
-            <h2 className="text-3xl font-bold text-gray-800">Register</h2>
-            <p className="text-gray-600 mt-2">Join the AGS community</p>
+            <UserPlus size={64} className="mx-auto text-green-300 mb-4 floating-icon" />
+            <h2 className="text-3xl font-bold text-white mb-2">Register</h2>
+            <p className="text-white/70">Join the AGS community</p>
           </div>
 
+          {/* Alerts */}
           {error && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-              {error}
-            </div>
+            <Alert type="error" message={error} className="mb-6" />
           )}
-
           {success && (
-            <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg">
-              {success}
-            </div>
+            <Alert type="success" message={success} className="mb-6" />
           )}
 
+          {/* Register Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <User className="inline w-4 h-4 mr-2" />
+              <label className="block text-white/90 font-medium mb-2">
+                <User size={18} className="inline mr-2" />
                 Username
               </label>
               <input
@@ -77,14 +77,15 @@ const Register = () => {
                 name="username"
                 value={formData.username}
                 onChange={handleChange}
-                className="input-field w-full"
+                className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/50 focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
+                placeholder="Choose a username"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Mail className="inline w-4 h-4 mr-2" />
+              <label className="block text-white/90 font-medium mb-2">
+                <Mail size={18} className="inline mr-2" />
                 Email
               </label>
               <input
@@ -92,14 +93,15 @@ const Register = () => {
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
-                className="input-field w-full"
+                className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/50 focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
+                placeholder="Enter your email"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Lock className="inline w-4 h-4 mr-2" />
+              <label className="block text-white/90 font-medium mb-2">
+                <Lock size={18} className="inline mr-2" />
                 Password
               </label>
               <input
@@ -107,49 +109,57 @@ const Register = () => {
                 name="password"
                 value={formData.password}
                 onChange={handleChange}
-                className="input-field w-full"
+                className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/50 focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
+                placeholder="Create a password"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Tag className="inline w-4 h-4 mr-2" />
+              <label className="block text-white/90 font-medium mb-2">
+                <UserCheck size={18} className="inline mr-2" />
                 I am a:
               </label>
               <select
                 name="user_type"
                 value={formData.user_type}
                 onChange={handleChange}
-                className="input-field w-full"
+                className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
                 required
               >
-                <option value="">Choose your role</option>
-                <option value="professor">Professor</option>
-                <option value="student">Student</option>
+                <option value="" className="bg-gray-800">Choose your role</option>
+                <option value="professor" className="bg-gray-800">Professor</option>
+                <option value="student" className="bg-gray-800">Student</option>
               </select>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary w-full flex items-center justify-center space-x-2"
+              className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-300 hover:from-green-600 hover:to-emerald-700 hover:scale-105 shadow-lg flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                <>
+                  <div className="loading"></div>
+                  <span>Registering...</span>
+                </>
               ) : (
                 <>
-                  <UserPlus className="w-5 h-5" />
+                  <UserPlus size={18} />
                   <span>Register</span>
                 </>
               )}
             </button>
           </form>
 
+          {/* Login Link */}
           <div className="text-center mt-6">
-            <p className="text-gray-600">
+            <p className="text-white/70">
               Already have an account?{' '}
-              <Link to="/login" className="text-primary-500 hover:text-primary-600 font-medium">
+              <Link 
+                to="/login" 
+                className="text-green-300 hover:text-green-200 font-medium transition-colors"
+              >
                 Login here
               </Link>
             </p>
@@ -157,7 +167,7 @@ const Register = () => {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default Register
+export default Register;

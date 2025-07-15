@@ -1,173 +1,173 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import axios from 'axios'
-import { UserPlus, Key, LogIn, ArrowLeft, Search, AlertTriangle, Clock, Bell } from 'lucide-react'
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { UserPlus, Key, ArrowLeft, Search, AlertTriangle, Clock, Bell } from 'lucide-react';
+import axios from 'axios';
+import Alert from '../components/Alert';
 
-const EnrollCourse = () => {
-  const navigate = useNavigate()
+function EnrollCourse() {
   const [formData, setFormData] = useState({
     course_code: ''
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  });
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const navigate = useNavigate();
 
   const handleChange = (e) => {
-    // Auto-uppercase the course code
-    const value = e.target.value.toUpperCase()
+    // Auto-uppercase and limit to 8 characters
+    const value = e.target.value.toUpperCase().slice(0, 8);
     setFormData({
       ...formData,
       [e.target.name]: value
-    })
-  }
+    });
+    setError('');
+    setSuccess('');
+  };
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    setSuccess('')
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
     try {
-      const response = await axios.post('/api/courses/enroll', formData)
+      const response = await axios.post('/api/enroll', formData);
       
       if (response.data.success) {
-        setSuccess(response.data.message)
+        setSuccess(response.data.message);
         setTimeout(() => {
-          navigate('/student/dashboard')
-        }, 2000)
+          navigate('/student/dashboard');
+        }, 2000);
       }
     } catch (error) {
-      setError(error.response?.data?.message || 'Failed to enroll in course')
+      setError(error.response?.data?.error || 'Failed to enroll in course');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div className="text-center">
-        <UserPlus className="h-16 w-16 text-primary-500 mx-auto mb-4 animate-bounce" />
-        <h1 className="text-3xl font-bold text-gray-800">Enroll in Course</h1>
-        <p className="text-gray-600 mt-2">Enter the course code provided by your professor</p>
+      <div className="glass-card p-6">
+        <div className="text-center">
+          <UserPlus size={64} className="mx-auto text-green-300 mb-4 floating-icon" />
+          <h1 className="text-3xl font-bold text-white mb-2">Enroll in Course</h1>
+          <p className="text-white/70">Enter the course code provided by your professor</p>
+        </div>
       </div>
 
-      {/* Main Form */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="card p-8">
-          {error && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-              {error}
-            </div>
-          )}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Form Section */}
+        <div className="lg:col-span-2">
+          <div className="glass-card p-6">
+            {/* Alerts */}
+            {error && (
+              <Alert type="error" message={error} className="mb-6" />
+            )}
+            {success && (
+              <Alert type="success" message={success} className="mb-6" />
+            )}
 
-          {success && (
-            <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg">
-              {success}
-            </div>
-          )}
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label className="block text-white/90 font-semibold mb-3">
+                  <Key size={18} className="inline mr-2" />
+                  Course Code
+                </label>
+                <input
+                  type="text"
+                  name="course_code"
+                  value={formData.course_code}
+                  onChange={handleChange}
+                  className="w-full px-4 py-4 rounded-xl bg-white/10 border border-white/20 text-white text-center text-xl font-bold tracking-wider placeholder-white/50 focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
+                  placeholder="Enter 8-character course code"
+                  maxLength="8"
+                  required
+                />
+                <p className="text-white/60 text-sm mt-2">
+                  Course codes are 8 characters long (e.g., ABC12345)
+                </p>
+              </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Key className="inline w-4 h-4 mr-2" />
-                Course Code
-              </label>
-              <input
-                type="text"
-                name="course_code"
-                value={formData.course_code}
-                onChange={handleChange}
-                placeholder="Enter 8-character course code"
-                maxLength="8"
-                className="input-field w-full text-center text-lg font-bold tracking-widest"
-                style={{ letterSpacing: '2px' }}
-                required
-              />
-              <p className="text-sm text-gray-500 mt-1">
-                Course codes are 8 characters long (e.g., ABC12345)
-              </p>
-            </div>
+              <div className="space-y-4">
+                <button
+                  type="submit"
+                  disabled={loading || formData.course_code.length !== 8}
+                  className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-300 hover:from-green-600 hover:to-emerald-700 hover:scale-105 shadow-lg flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? (
+                    <>
+                      <div className="loading"></div>
+                      <span>Enrolling...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus size={18} />
+                      <span>Enroll in Course</span>
+                    </>
+                  )}
+                </button>
 
-            <div className="space-y-3">
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn-primary w-full flex items-center justify-center space-x-2"
-              >
-                {loading ? (
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                ) : (
-                  <>
-                    <LogIn className="w-5 h-5" />
-                    <span>Enroll in Course</span>
-                  </>
-                )}
-              </button>
-
-              <Link 
-                to="/student/dashboard" 
-                className="btn-outline w-full flex items-center justify-center space-x-2"
-              >
-                <ArrowLeft className="w-5 h-5" />
-                <span>Back to Dashboard</span>
-              </Link>
-            </div>
-          </form>
+                <Link
+                  to="/student/dashboard"
+                  className="w-full glass-button flex items-center justify-center space-x-2"
+                >
+                  <ArrowLeft size={18} />
+                  <span>Back to Dashboard</span>
+                </Link>
+              </div>
+            </form>
+          </div>
         </div>
 
-        {/* Help Card */}
-        <div className="card p-8">
-          <h3 className="text-xl font-semibold text-gray-800 mb-6 flex items-center">
-            <Search className="mr-2 text-primary-500" />
-            Need Help?
-          </h3>
-
-          <div className="space-y-6">
-            <div className="flex items-start space-x-3">
-              <Search className="w-6 h-6 text-blue-500 mt-0.5 flex-shrink-0" />
-              <div>
-                <h4 className="font-semibold text-gray-700">Where to Find Course Code?</h4>
-                <p className="text-sm text-gray-600">
-                  Your professor will provide the course code during class or via email
-                </p>
-              </div>
+        {/* Help Section */}
+        <div className="lg:col-span-1">
+          <div className="glass-card">
+            <div className="p-6 border-b border-white/10">
+              <h3 className="text-lg font-bold text-white flex items-center">
+                <Search className="mr-2" size={20} />
+                Need Help?
+              </h3>
             </div>
-
-            <div className="flex items-start space-x-3">
-              <AlertTriangle className="w-6 h-6 text-yellow-500 mt-0.5 flex-shrink-0" />
-              <div>
-                <h4 className="font-semibold text-gray-700">Invalid Code?</h4>
-                <p className="text-sm text-gray-600">
-                  Double-check the code with your professor if enrollment fails
-                </p>
+            <div className="p-6 space-y-6">
+              <div className="flex items-start space-x-3">
+                <Search className="text-blue-400 flex-shrink-0 mt-1" size={20} />
+                <div>
+                  <h4 className="font-semibold text-white">Where to Find Course Code?</h4>
+                  <p className="text-white/60 text-sm">Your professor will provide the course code during class or via email</p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-start space-x-3">
-              <Clock className="w-6 h-6 text-green-500 mt-0.5 flex-shrink-0" />
-              <div>
-                <h4 className="font-semibold text-gray-700">Instant Access</h4>
-                <p className="text-sm text-gray-600">
-                  Once enrolled, you'll immediately see course assignments
-                </p>
+              <div className="flex items-start space-x-3">
+                <AlertTriangle className="text-yellow-400 flex-shrink-0 mt-1" size={20} />
+                <div>
+                  <h4 className="font-semibold text-white">Invalid Code?</h4>
+                  <p className="text-white/60 text-sm">Double-check the code with your professor if enrollment fails</p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-start space-x-3">
-              <Bell className="w-6 h-6 text-primary-500 mt-0.5 flex-shrink-0" />
-              <div>
-                <h4 className="font-semibold text-gray-700">Notifications</h4>
-                <p className="text-sm text-gray-600">
-                  Get notified about new assignments and deadlines
-                </p>
+              <div className="flex items-start space-x-3">
+                <Clock className="text-green-400 flex-shrink-0 mt-1" size={20} />
+                <div>
+                  <h4 className="font-semibold text-white">Instant Access</h4>
+                  <p className="text-white/60 text-sm">Once enrolled, you'll immediately see course assignments</p>
+                </div>
+              </div>
+
+              <div className="flex items-start space-x-3">
+                <Bell className="text-purple-400 flex-shrink-0 mt-1" size={20} />
+                <div>
+                  <h4 className="font-semibold text-white">Notifications</h4>
+                  <p className="text-white/60 text-sm">Get notified about new assignments and deadlines</p>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default EnrollCourse
+export default EnrollCourse;

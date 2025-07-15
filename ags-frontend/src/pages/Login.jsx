@@ -1,61 +1,65 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import axios from 'axios'
-import { User, Lock, LogIn } from 'lucide-react'  // ← Removed UserCircle
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { UserCircle, User, Lock, LogIn } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import Alert from '../components/Alert';
 
-const Login = ({ onLogin }) => {
+function Login() {
   const [formData, setFormData] = useState({
     username: '',
     password: ''
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const { login } = useAuth();
+  const navigate = useNavigate();
 
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
-    })
-  }
+    });
+    setError(''); // Clear error when user types
+  };
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
-    try {
-      const response = await axios.post('/api/auth/login', formData)
-      
-      if (response.data.success) {
-        onLogin(response.data.user)
-      }
-    } catch (error) {
-      setError(error.response?.data?.message || 'Login failed')
-    } finally {
-      setLoading(false)
+    const result = await login(formData.username, formData.password);
+    
+    if (result.success) {
+      navigate('/');
+    } else {
+      setError(result.error);
     }
-  }
+    
+    setLoading(false);
+  };
 
   return (
-    <div className="flex justify-center items-center min-h-[80vh]">
-      <div className="w-full max-w-md">
-        <div className="card p-8">
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="max-w-md w-full">
+        <div className="glass-card p-8">
+          {/* Header */}
           <div className="text-center mb-8">
-            <User className="h-16 w-16 text-primary-500 mx-auto mb-4" />
-            <h2 className="text-3xl font-bold text-gray-800">Login</h2>
-            <p className="text-gray-600 mt-2">Welcome back to AGS</p>
+            <UserCircle size={64} className="mx-auto text-blue-300 mb-4 floating-icon" />
+            <h2 className="text-3xl font-bold text-white mb-2">Login</h2>
+            <p className="text-white/70">Welcome back to AGS</p>
           </div>
 
+          {/* Error Alert */}
           {error && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-              {error}
-            </div>
+            <Alert type="error" message={error} className="mb-6" />
           )}
 
+          {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <User className="inline w-4 h-4 mr-2" />
+              <label className="block text-white/90 font-medium mb-2">
+                <User size={18} className="inline mr-2" />
                 Username
               </label>
               <input
@@ -63,14 +67,15 @@ const Login = ({ onLogin }) => {
                 name="username"
                 value={formData.username}
                 onChange={handleChange}
-                className="input-field w-full"
+                className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/50 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
+                placeholder="Enter your username"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Lock className="inline w-4 h-4 mr-2" />
+              <label className="block text-white/90 font-medium mb-2">
+                <Lock size={18} className="inline mr-2" />
                 Password
               </label>
               <input
@@ -78,7 +83,8 @@ const Login = ({ onLogin }) => {
                 name="password"
                 value={formData.password}
                 onChange={handleChange}
-                className="input-field w-full"
+                className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/50 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
+                placeholder="Enter your password"
                 required
               />
             </div>
@@ -86,23 +92,30 @@ const Login = ({ onLogin }) => {
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary w-full flex items-center justify-center space-x-2"
+              className="w-full primary-button flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                <>
+                  <div className="loading"></div>
+                  <span>Logging in...</span>
+                </>
               ) : (
                 <>
-                  <LogIn className="w-5 h-5" />
+                  <LogIn size={18} />
                   <span>Login</span>
                 </>
               )}
             </button>
           </form>
 
+          {/* Register Link */}
           <div className="text-center mt-6">
-            <p className="text-gray-600">
+            <p className="text-white/70">
               Don't have an account?{' '}
-              <Link to="/register" className="text-primary-500 hover:text-primary-600 font-medium">
+              <Link 
+                to="/register" 
+                className="text-blue-300 hover:text-blue-200 font-medium transition-colors"
+              >
                 Register here
               </Link>
             </p>
@@ -110,7 +123,7 @@ const Login = ({ onLogin }) => {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default Login
+export default Login;

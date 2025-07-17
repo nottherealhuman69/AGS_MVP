@@ -149,12 +149,13 @@ function ProfessorDashboard() {
                           >
                             <Plus size={14} />
                           </Link>
-                          <button
+                          <Link
+                            to={`/course/${course.id}/students`}
                             className="bg-purple-500/20 text-purple-300 px-3 py-1 rounded-lg text-sm font-medium hover:bg-purple-500/30 transition-colors flex items-center space-x-1"
                             title="View Students"
-                          >
+                            >
                             <UserCheck size={14} />
-                          </button>
+                            </Link>
                         </div>
                       </td>
                     </tr>

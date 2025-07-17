@@ -10,6 +10,7 @@ import CreateCourse from './pages/CreateCourse';
 import EnrollCourse from './pages/EnrollCourse';
 import CourseDetails from './pages/CourseDetails';
 import CreateAssignment from './pages/CreateAssignment';
+import ViewStudents from './pages/ViewStudents';
 import AssignmentDetails from './pages/AssignmentDetails';
 import './App.css';
 
@@ -89,6 +90,10 @@ function AppContent() {
           
           <Route path="/course/:courseId/create-assignment" element={
             user?.user_type === 'professor' ? <CreateAssignment /> : <Navigate to="/login" />
+          } />
+
+          <Route path="/course/:courseId/students" element={
+            user?.user_type === 'professor' ? <ViewStudents /> : <Navigate to="/login" />
           } />
           
           <Route path="/assignment/:assignmentId" element={

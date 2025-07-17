@@ -609,6 +609,118 @@ def api_submit_assignment(assignment_id):
     conn.close()
     return jsonify({'success': True, 'message': message})
 
+# Add this new API endpoint to your app.py file
+
+@app.route('/api/courses/<int:course_id>/students', methods=['GET'])
+def api_course_students(course_id):
+    """Get all students enrolled in a specific course - professor only"""
+    if 'user_id' not in session or session['user_type'] != 'professor':
+        return jsonify({'error': 'Access denied'}), 403
+    
+    conn = get_db()
+    
+    # Verify the professor owns this course
+    course = conn.execute('SELECT * FROM courses WHERE id = ? AND professor_id = ?',
+                         (course_id, session['user_id'])).fetchone()
+    
+    if not course:
+        conn.close()
+        return jsonify({'error': 'Course not found or access denied'}), 404
+    
+    # Get all students enrolled in this course with their enrollment details
+    students = conn.execute('''
+        SELECT u.id, u.username, u.email, u.created_at as user_created_at,
+               e.enrolled_at, e.id as enrollment_id,
+               COUNT(s.id) as total_submissions,
+               AVG(CASE WHEN s.grade IS NOT NULL THEN s.grade END) as avg_grade
+        FROM users u 
+        JOIN enrollments e ON u.id = e.student_id 
+        LEFT JOIN submissions s ON u.id = s.student_id 
+        LEFT JOIN events ev ON s.event_id = ev.id AND ev.course_id = ?
+        WHERE e.course_id = ? AND u.user_type = 'student'
+        GROUP BY u.id, u.username, u.email, u.created_at, e.enrolled_at, e.id
+        ORDER BY e.enrolled_at DESC
+    ''', (course_id, course_id)).fetchall()
+    
+    # Get course details
+    course_info = dict(course)
+    course_info['created_at'] = safe_datetime_parse(course_info['created_at'])
+    
+    # Convert students to list of dicts
+    students_list = []
+    for student in students:
+        student_dict = dict(student)
+        student_dict['enrolled_at'] = safe_datetime_parse(student_dict['enrolled_at'])
+        student_dict['user_created_at'] = safe_datetime_parse(student_dict['user_created_at'])
+        # Round average grade to 2 decimal places
+        if student_dict['avg_grade']:
+            student_dict['avg_grade'] = round(student_dict['avg_grade'], 2)
+        students_list.append(student_dict)
+    
+    conn.close()
+    
+    return jsonify({
+        'course': course_info,
+        'students': students_list,
+        'total_students': len(students_list)
+    })
+
+@app.route('/api/courses/<int:course_id>/students/<int:student_id>/performance', methods=['GET'])
+def api_student_performance(course_id, student_id):
+    """Get detailed performance data for a specific student in a course - professor only"""
+    if 'user_id' not in session or session['user_type'] != 'professor':
+        return jsonify({'error': 'Access denied'}), 403
+    
+    conn = get_db()
+    
+    # Verify the professor owns this course
+    course = conn.execute('SELECT * FROM courses WHERE id = ? AND professor_id = ?',
+                         (course_id, session['user_id'])).fetchone()
+    
+    if not course:
+        conn.close()
+        return jsonify({'error': 'Course not found or access denied'}), 404
+    
+    # Verify student is enrolled in the course
+    enrollment = conn.execute('SELECT * FROM enrollments WHERE student_id = ? AND course_id = ?',
+                             (student_id, course_id)).fetchone()
+    
+    if not enrollment:
+        conn.close()
+        return jsonify({'error': 'Student not enrolled in this course'}), 404
+    
+    # Get student info
+    student = conn.execute('SELECT id, username, email FROM users WHERE id = ? AND user_type = "student"',
+                          (student_id,)).fetchone()
+    
+    # Get all assignments in the course with student's submissions
+    assignments = conn.execute('''
+        SELECT e.id, e.event_name, e.event_type, e.deadline, e.created_at,
+               s.id as submission_id, s.grade, s.feedback, s.submitted_at, s.grading_status
+        FROM events e
+        LEFT JOIN submissions s ON e.id = s.event_id AND s.student_id = ?
+        WHERE e.course_id = ?
+        ORDER BY e.deadline ASC
+    ''', (student_id, course_id)).fetchall()
+    
+    # Convert to list of dicts
+    assignments_list = []
+    for assignment in assignments:
+        assignment_dict = dict(assignment)
+        assignment_dict['deadline'] = safe_datetime_parse(assignment_dict['deadline'])
+        assignment_dict['created_at'] = safe_datetime_parse(assignment_dict['created_at'])
+        assignment_dict['submitted_at'] = safe_datetime_parse(assignment_dict['submitted_at'])
+        assignments_list.append(assignment_dict)
+    
+    conn.close()
+    
+    return jsonify({
+        'student': dict(student) if student else None,
+        'course': dict(course),
+        'assignments': assignments_list,
+        'enrollment': dict(enrollment)
+    })
+
 if __name__ == '__main__':
     print("Starting Enhanced AGS API...")
     try:
